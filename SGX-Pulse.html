@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0f">
+<title>SGX Pulse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #1a1a24;
+    --card: #14141e;
+    --card2: #1c1c28;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0f0f8;
+    --text2: #9090a8;
+    --text3: #5a5a70;
+    --accent: #4f8ef7;
+    --accent2: #6fa3ff;
+    --green: #34c98a;
+    --green-bg: rgba(52,201,138,0.12);
+    --red: #ff5a6a;
+    --red-bg: rgba(255,90,106,0.12);
+    --amber: #f0a832;
+    --amber-bg: rgba(240,168,50,0.12);
+    --purple: #a78bfa;
+    --purple-bg: rgba(167,139,250,0.12);
+    --safe-top: env(safe-area-inset-top, 44px);
+    --safe-bottom: env(safe-area-inset-bottom, 34px);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+
+  .status-bar { height: var(--safe-top); background: rgba(10,10,15,0.95); flex-shrink: 0; }
+
+  .header {
+    background: rgba(10,10,15,0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 0.5px solid var(--border);
+    padding: 12px 20px 14px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .app-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; line-height: 1; }
+  .app-subtitle { font-size: 11px; color: var(--text3); margin-top: 3px; font-family: 'DM Mono', monospace; }
+
+  .scan-btn {
+    background: var(--accent); border: none; border-radius: 22px;
+    padding: 9px 18px; color: #fff; font-family: 'Syne', sans-serif;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: opacity 0.15s, transform 0.15s; white-space: nowrap; flex-shrink: 0;
+  }
+  .scan-btn:active { transform: scale(0.95); opacity: 0.85; }
+  .scan-btn:disabled { background: var(--bg3); color: var(--text3); cursor: default; transform: none; }
+
+  .progress-bar-wrap { height: 2px; background: var(--bg3); flex-shrink: 0; overflow: hidden; opacity: 0; transition: opacity 0.3s; }
+  .progress-bar-wrap.visible { opacity: 1; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--purple)); width: 0%; transition: width 0.5s ease; }
+
+  .summary-strip {
+    display: none; gap: 10px; padding: 12px 20px; flex-shrink: 0;
+    overflow-x: auto; scrollbar-width: none;
+    border-bottom: 0.5px solid var(--border); background: var(--bg2);
+  }
+  .summary-strip::-webkit-scrollbar { display: none; }
+  .stat-pill { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 8px 14px; flex-shrink: 0; min-width: 80px; text-align: center; }
+  .stat-num { font-size: 20px; font-weight: 700; line-height: 1; }
+  .stat-num.green { color: var(--green); }
+  .stat-num.red { color: var(--red); }
+  .stat-num.amber { color: var(--amber); }
+  .stat-label { font-size: 10px; color: var(--text3); margin-top: 3px; font-family: 'DM Mono', monospace; }
+
+  /* SCROLLABLE LIST */
+  .list {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 16px;
+    padding-bottom: calc(var(--safe-bottom) + 70px);
+    scrollbar-width: none;
+  }
+  .list::-webkit-scrollbar { display: none; }
+
+  /* EMPTY STATE */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 80px 40px; gap: 12px; text-align: center;
+  }
+  .empty-icon { font-size: 48px; margin-bottom: 4px; }
+  .empty-title { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .empty-desc { font-size: 13px; color: var(--text3); line-height: 1.6; max-width: 240px; }
+
+  /* COMPANY CARDS */
+  .company-card {
+    background: var(--card); border: 0.5px solid var(--border);
+    border-radius: 16px; margin-bottom: 10px; overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .company-card.has-result { border-color: var(--border2); }
+
+  .card-header {
+    display: flex; align-items: center; padding: 14px 16px; gap: 12px;
+    cursor: pointer; user-select: none; -webkit-user-select: none; min-height: 68px;
+  }
+  .card-header:active { background: var(--card2); }
+
+  .company-avatar {
+    width: 42px; height: 42px; border-radius: 10px;
+    background: var(--bg3); display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: var(--text2); flex-shrink: 0;
+    font-family: 'DM Mono', monospace; border: 0.5px solid var(--border);
+  }
+  .card-meta { flex: 1; min-width: 0; }
+  .company-name { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .company-sub { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .company-ticker { font-size: 10px; font-family: 'DM Mono', monospace; color: var(--text3); }
+
+  .pill { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 5px; }
+  .pill-green { background: var(--green-bg); color: var(--green); }
+  .pill-red { background: var(--red-bg); color: var(--red); }
+  .pill-amber { background: var(--amber-bg); color: var(--amber); }
+  .pill-gray { background: rgba(144,144,168,0.12); color: var(--text2); }
+  .pill-purple { background: var(--purple-bg); color: var(--purple); }
+
+  .card-right { display: flex; align-items: center; flex-shrink: 0; }
+  .chevron { font-size: 16px; color: var(--text3); transition: transform 0.25s ease; display: block; }
+  .company-card.expanded .chevron { transform: rotate(180deg); }
+
+  .loading-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    animation: blink 1.1s infinite ease-in-out;
+  }
+  @keyframes blink { 0%,100%{opacity:0.25;transform:scale(0.7)} 50%{opacity:1;transform:scale(1)} }
+
+  /* CARD BODY — hidden by default, shown when .expanded */
+  .card-body { display: none; border-top: 0.5px solid var(--border); animation: fadeIn 0.2s ease; }
+  .company-card.expanded .card-body { display: block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+
+  .summary-text { padding: 14px 16px; font-size: 13px; color: var(--text2); line-height: 1.65; border-bottom: 0.5px solid var(--border); }
+
+  .section-label { padding: 10px 16px 6px; font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  .key-points { padding: 0 16px 10px; border-bottom: 0.5px solid var(--border); }
+  .key-point { display: flex; gap: 8px; font-size: 12px; color: var(--text2); line-height: 1.55; padding: 3px 0; }
+  .key-point-dot { color: var(--accent); flex-shrink: 0; font-size: 18px; line-height: 1.1; }
+
+  .articles-list { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .article-item {
+    background: var(--bg3); border-radius: 10px; padding: 11px 13px;
+    text-decoration: none; display: flex; gap: 10px; align-items: flex-start;
+    border: 0.5px solid var(--border);
+  }
+  .article-item:active { border-color: var(--accent); }
+  .article-num { font-size: 10px; font-family: 'DM Mono', monospace; color: var(--text3); flex-shrink: 0; margin-top: 2px; min-width: 18px; }
+  .article-content { flex: 1; min-width: 0; }
+  .article-title { font-size: 12px; color: var(--accent2); line-height: 1.45; font-weight: 500; }
+  .article-meta { font-size: 10px; color: var(--text3); margin-top: 3px; font-family: 'DM Mono', monospace; }
+  .article-impact { flex-shrink: 0; font-size: 11px; font-family: 'DM Mono', monospace; font-weight: 500; margin-top: 2px; }
+  .article-impact.pos { color: var(--green); }
+  .article-impact.neg { color: var(--red); }
+  .article-impact.neu { color: var(--text3); }
+
+  .card-loading { display: flex; align-items: center; gap: 10px; padding: 14px 16px; font-size: 12px; color: var(--text3); font-family: 'DM Mono', monospace; }
+
+  /* BOTTOM TAB BAR */
+  .tab-bar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: calc(50px + var(--safe-bottom));
+    background: rgba(10,10,15,0.96);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-top: 0.5px solid var(--border);
+    display: flex; align-items: flex-start; justify-content: space-around;
+    padding-top: 10px; z-index: 10;
+  }
+  .tab-item { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; color: var(--text3); cursor: pointer; padding: 0 16px; }
+  .tab-item.active { color: var(--accent); }
+  .tab-icon { font-size: 22px; line-height: 1; }
+
+  /* TOAST */
+  .toast {
+    position: absolute; top: calc(var(--safe-top) + 70px); left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    background: var(--card2); border: 0.5px solid var(--border2);
+    border-radius: 22px; padding: 10px 20px; font-size: 13px; color: var(--text);
+    white-space: nowrap; z-index: 100; opacity: 0;
+    transition: all 0.28s ease; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ERROR BANNER */
+  .error-banner {
+    background: var(--red-bg); border: 0.5px solid var(--red);
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 10px;
+    font-size: 12px; color: var(--red); line-height: 1.5; display: none;
+  }
+
+  /* API KEY SETUP SCREEN */
+  .setup-screen {
+    position: absolute; inset: 0; z-index: 200;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 40px 32px;
+    padding-top: calc(var(--safe-top) + 40px);
+    padding-bottom: calc(var(--safe-bottom) + 40px);
+  }
+  .setup-screen.hidden { display: none; }
+  .setup-logo { font-size: 52px; margin-bottom: 16px; }
+  .setup-title { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; text-align: center; }
+  .setup-desc { font-size: 13px; color: var(--text2); line-height: 1.7; text-align: center; margin-bottom: 32px; max-width: 280px; }
+  .setup-label { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; align-self: flex-start; width: 100%; max-width: 320px; }
+  .setup-input {
+    width: 100%; max-width: 320px;
+    background: var(--card); border: 0.5px solid var(--border2);
+    border-radius: 12px; padding: 14px 16px;
+    font-family: 'DM Mono', monospace; font-size: 13px;
+    color: var(--text); outline: none;
+    margin-bottom: 12px;
+  }
+  .setup-input:focus { border-color: var(--accent); }
+  .setup-input::placeholder { color: var(--text3); }
+  .setup-save-btn {
+    width: 100%; max-width: 320px;
+    background: var(--accent); border: none; border-radius: 14px;
+    padding: 15px; color: #fff;
+    font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700;
+    cursor: pointer; margin-bottom: 16px;
+  }
+  .setup-save-btn:active { opacity: 0.8; transform: scale(0.98); }
+  .setup-hint { font-size: 11px; color: var(--text3); text-align: center; max-width: 280px; line-height: 1.6; }
+  .setup-hint a { color: var(--accent2); text-decoration: none; }
+  .setup-err { font-size: 12px; color: var(--red); margin-top: -4px; margin-bottom: 10px; width: 100%; max-width: 320px; }
+
+  /* KEY BADGE in header */
+  .key-badge {
+    font-size: 10px; font-family: 'DM Mono', monospace;
+    background: var(--green-bg); color: var(--green);
+    border-radius: 6px; padding: 2px 8px;
+    cursor: pointer; border: 0.5px solid rgba(52,201,138,0.3);
+    flex-shrink: 0; white-space: nowrap;
+  }
+
+</style>
+</head>
+<body>
+<div id="app">
+  
+  <!-- API KEY SETUP SCREEN -->
+  <div class="setup-screen" id="setup-screen">
+    <div class="setup-logo">📡</div>
+    <div class="setup-title">SGX Pulse</div>
+    <div class="setup-desc">Enter your Anthropic API key to enable live AI-powered news scanning for your 10 SGX stocks.</div>
+    <div class="setup-label">Anthropic API Key</div>
+    <input class="setup-input" id="setup-key-input" type="password"
+      placeholder="sk-ant-api03-..." autocomplete="off" autocorrect="off"
+      spellcheck="false" onkeydown="if(event.key==='Enter')saveKey()" />
+    <div class="setup-err" id="setup-err" style="display:none"></div>
+    <button class="setup-save-btn" onclick="saveKey()">Save & Start →</button>
+    <div class="setup-hint">
+      Get your free API key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a><br>
+      Your key is saved only on this device and never shared.
+    </div>
+  </div>
+
+  <div class="status-bar"></div>
+
+  <div class="header">
+    <div>
+      <div class="app-title">SGX Pulse</div>
+      <div class="app-subtitle" id="header-sub">10 SGX stocks · AI news agent</div>
+    </div>
+    <button class="scan-btn" id="scan-btn" onclick="startScan()">Scan now</button>
+    <span class="key-badge" id="key-badge" onclick="showSetup()" style="display:none" title="API key saved · tap to change">key ✓</span>
+  </div>
+
+  <div class="progress-bar-wrap" id="progress-wrap">
+    <div class="progress-bar-fill" id="progress-fill"></div>
+  </div>
+
+  <div class="summary-strip" id="summary-strip">
+    <div class="stat-pill"><div class="stat-num" id="stat-total">0</div><div class="stat-label">scanned</div></div>
+    <div class="stat-pill"><div class="stat-num amber" id="stat-high">0</div><div class="stat-label">high impact</div></div>
+    <div class="stat-pill"><div class="stat-num green" id="stat-pos">0</div><div class="stat-label">positive</div></div>
+    <div class="stat-pill"><div class="stat-num red" id="stat-neg">0</div><div class="stat-label">negative</div></div>
+    <div class="stat-pill"><div class="stat-num" id="stat-neu" style="color:var(--text2)">0</div><div class="stat-label">neutral/mix</div></div>
+  </div>
+
+  <!-- Scrollable list: cards injected here by JS -->
+  <div class="list" id="list">
+    <div id="error-banner" class="error-banner"></div>
+
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">📡</div>
+      <div class="empty-title">SGX Pulse</div>
+      <div class="empty-desc">Tap "Scan now" to fetch today's market-moving news for your 10 SGX stocks</div>
+    </div>
+    <!-- card-container: company cards appended here -->
+    <div id="card-container"></div>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab-item active"><div class="tab-icon">📰</div><span>News</span></div>
+    <div class="tab-item" onclick="showToast('Watchlist — coming soon')"><div class="tab-icon">⭐</div><span>Watchlist</span></div>
+    <div class="tab-item" onclick="showToast('Alerts — coming soon')"><div class="tab-icon">🔔</div><span>Alerts</span></div>
+    <div class="tab-item" onclick="showToast('Settings — coming soon')"><div class="tab-icon">⚙️</div><span>Settings</span></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const COMPANIES = [
+  { name: "ST Engineering",    ticker: "S63.SI", sector: "Defence & Engineering",    initials: "STE" },
+  { name: "AEM Holdings",      ticker: "AWX.SI", sector: "Semiconductor Equipment",  initials: "AEM" },
+  { name: "OCBC Bank",         ticker: "O39.SI", sector: "Banking",                  initials: "OBC" },
+  { name: "DBS Group",         ticker: "D05.SI", sector: "Banking",                  initials: "DBS" },
+  { name: "Keppel Corp",       ticker: "BN4.SI", sector: "Infrastructure",           initials: "KEP" },
+  { name: "Sembcorp Ind",      ticker: "U96.SI", sector: "Energy & Urban",           initials: "SCI" },
+  { name: "CapitaLand Inv",    ticker: "9CI.SI", sector: "Real Estate",              initials: "CLI" },
+  { name: "IHH Healthcare",    ticker: "Q0F.SI", sector: "Healthcare",               initials: "IHH" },
+  { name: "Singapore Airlines",ticker: "C6L.SI", sector: "Aviation",                 initials: "SIA" },
+  { name: "Singtel",           ticker: "Z74.SI", sector: "Telecommunications",       initials: "STL" },
+];
+
+let results    = {};
+let expanded   = new Set();
+let scanning   = false;
+
+/* ── DOM helpers ── */
+const $  = id => document.getElementById(id);
+const cc = () => $('card-container');
+
+/* ── Pill renderers ── */
+function sentimentPill(s) {
+  if (s === 'Positive') return '<span class="pill pill-green">↑ Positive</span>';
+  if (s === 'Negative') return '<span class="pill pill-red">↓ Negative</span>';
+  if (s === 'Mixed')    return '<span class="pill pill-amber">~ Mixed</span>';
+  return '<span class="pill pill-gray">– Neutral</span>';
+}
+function impactPill(i) {
+  if (i === 'High')   return '<span class="pill pill-amber">High</span>';
+  if (i === 'Medium') return '<span class="pill pill-purple">Med</span>';
+  return '<span class="pill pill-gray">Low</span>';
+}
+
+/* ── Build card HTML ── */
+function buildCardHTML(company) {
+  const result   = results[company.ticker];
+  const isLoading = scanning && !result;
+  const isExp    = expanded.has(company.ticker);
+
+  /* card body */
+  let body = '';
+  if (isLoading) {
+    body = `<div class="card-body" style="display:block">
+      <div class="card-loading"><div class="loading-dot"></div>Searching for latest news…</div>
+    </div>`;
+  } else if (result) {
+    const arts = (result.articles || []).map((a, i) => {
+      const ic = a.priceImpact && a.priceImpact.startsWith('+') ? 'pos'
+               : a.priceImpact && a.priceImpact.startsWith('-') ? 'neg' : 'neu';
+      const num = i + 1 < 10 ? '0' + (i + 1) : String(i + 1);
+      return `<a class="article-item" href="${a.url || '#'}" target="_blank" rel="noopener noreferrer">
+        <div class="article-num">${num}</div>
+        <div class="article-content">
+          <div class="article-title">${a.title || 'Article'}</div>
+          <div class="article-meta">${a.source || ''}${a.date ? ' · ' + a.date : ''}</div>
+        </div>
+        ${a.priceImpact ? `<div class="article-impact ${ic}">${a.priceImpact}</div>` : ''}
+      </a>`;
+    }).join('');
+
+    const kpts = (result.keyPoints || []).map(p =>
+      `<div class="key-point"><span class="key-point-dot">·</span><span>${p}</span></div>`
+    ).join('');
+
+    body = `<div class="card-body">
+      <div class="summary-text">${result.summary || 'No summary available.'}</div>
+      ${kpts ? `<div class="section-label">Key price drivers</div><div class="key-points">${kpts}</div>` : ''}
+      ${arts ? `<div class="section-label">Source articles</div><div class="articles-list">${arts}</div>` : ''}
+    </div>`;
+  }
+
+  return `<div class="card-header" onclick="toggleCard('${company.ticker}')">
+    <div class="company-avatar">${company.initials}</div>
+    <div class="card-meta">
+      <div class="company-name">${company.name}</div>
+      <div class="company-sub">
+        <span class="company-ticker">${company.ticker}</span>
+        ${result ? sentimentPill(result.sentiment) : ''}
+        ${result ? impactPill(result.impact) : ''}
+      </div>
+    </div>
+    <div class="card-right">
+      ${isLoading ? '<div class="loading-dot"></div>' : result ? `<span class="chevron">▾</span>` : ''}
+    </div>
+  </div>${body}`;
+}
+
+/* ── Render / update all cards ── */
+function renderCards() {
+  const container = cc();
+  COMPANIES.forEach(company => {
+    let card = $('card-' + company.ticker);
+    if (!card) {
+      card = document.createElement('div');
+      card.id        = 'card-' + company.ticker;
+      card.className = 'company-card';
+      container.appendChild(card);
+    }
+
+    const result  = results[company.ticker];
+    const isExp   = expanded.has(company.ticker);
+
+    card.className = 'company-card'
+      + (result  ? ' has-result' : '')
+      + (isExp   ? ' expanded'   : '');
+
+    card.innerHTML = buildCardHTML(company);
+  });
+}
+
+/* ── Toggle expand/collapse ── */
+function toggleCard(ticker) {
+  if (!results[ticker]) return;
+  const card = $('card-' + ticker);
+  if (!card) return;
+  if (expanded.has(ticker)) { expanded.delete(ticker); card.classList.remove('expanded'); }
+  else                       { expanded.add(ticker);    card.classList.add('expanded');   }
+}
+
+/* ── Stats strip ── */
+function updateStats() {
+  const vals = Object.values(results);
+  $('stat-total').textContent = vals.length;
+  $('stat-high').textContent  = vals.filter(r => r.impact    === 'High').length;
+  $('stat-pos').textContent   = vals.filter(r => r.sentiment === 'Positive').length;
+  $('stat-neg').textContent   = vals.filter(r => r.sentiment === 'Negative').length;
+  $('stat-neu').textContent   = vals.filter(r => r.sentiment === 'Neutral' || r.sentiment === 'Mixed').length;
+  if (vals.length > 0) $('summary-strip').style.display = 'flex';
+}
+
+/* ── API call ── */
+async function fetchCompanyNews(company) {
+  const today = new Date().toLocaleDateString('en-SG', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': getKey(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 1024,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{
+        role: 'user',
+        content: `You are a financial news analyst. Today is ${today}. Search the web for the LATEST news about ${company.name} (SGX: ${company.ticker}), a Singapore-listed ${company.sector} company.
+
+Find 3-5 recent news articles from the past 48 hours that could impact ${company.name}'s share price. Focus on: earnings, contract wins/losses, analyst upgrades/downgrades, M&A, regulatory news, dividends, macro factors.
+
+You MUST respond with ONLY a valid JSON object — no markdown fences, no explanation, just raw JSON:
+{"summary":"2-3 sentence summary of most important news and its likely share price impact","sentiment":"Positive","impact":"High","keyPoints":["key driver 1","key driver 2","key driver 3"],"articles":[{"title":"Article headline","url":"https://example.com","source":"Publication name","date":"25 Apr 2026","priceImpact":"+"}]}`
+      }]
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${errText.slice(0, 120)}`);
+  }
+
+  const data = await res.json();
+
+  /* Collect all text blocks (web search results come back with tool_use + text) */
+  const textBlocks = (data.content || [])
+    .filter(b => b.type === 'text')
+    .map(b => b.text)
+    .join('');
+
+  if (!textBlocks) throw new Error('No text in API response');
+
+  /* Strip markdown fences if present, then extract JSON object */
+  const cleaned = textBlocks.replace(/```json[\s\S]*?```/g, m => m.slice(7, -3))
+                             .replace(/```[\s\S]*?```/g, '');
+  const match   = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No JSON object found in response');
+
+  return JSON.parse(match[0]);
+}
+
+
+/* ── API Key management ── */
+function getKey() { return localStorage.getItem('sgx_pulse_api_key') || ''; }
+
+function saveKey() {
+  const val = ($('setup-key-input').value || '').trim();
+  if (!val.startsWith('sk-ant-')) {
+    $('setup-err').textContent = 'Key must start with sk-ant- — check and try again.';
+    $('setup-err').style.display = 'block';
+    return;
+  }
+  localStorage.setItem('sgx_pulse_api_key', val);
+  $('setup-screen').classList.add('hidden');
+  $('key-badge').style.display = 'inline-block';
+  $('setup-err').style.display = 'none';
+  showToast('API key saved ✓');
+}
+
+function showSetup() {
+  const k = getKey();
+  if (k) $('setup-key-input').value = k;
+  $('setup-screen').classList.remove('hidden');
+}
+
+function initApp() {
+  if (!getKey()) {
+    $('setup-screen').classList.remove('hidden');
+  } else {
+    $('setup-screen').classList.add('hidden');
+    $('key-badge').style.display = 'inline-block';
+  }
+}
+
+/* ── Main scan loop ── */
+async function startScan() {
+  if (!getKey()) { showSetup(); return; }
+  if (scanning) return;
+  scanning = true;
+  results  = {};
+  expanded.clear();
+
+  /* Reset UI */
+  $('scan-btn').disabled    = true;
+  $('scan-btn').textContent = 'Scanning…';
+  $('progress-wrap').classList.add('visible');
+  $('progress-fill').style.width = '0%';
+  $('header-sub').textContent    = 'Searching live web…';
+  $('empty-state').style.display = 'none';
+  $('error-banner').style.display = 'none';
+  $('summary-strip').style.display = 'none';
+
+  /* Clear old cards */
+  cc().innerHTML = '';
+
+  /* Pre-render skeletons so user sees all 10 company rows immediately */
+  renderCards();
+
+  let done = 0;
+  for (const company of COMPANIES) {
+    try {
+      const result = await fetchCompanyNews(company);
+      results[company.ticker] = result;
+    } catch (err) {
+      console.error(company.name, err);
+      results[company.ticker] = {
+        summary:   `Could not retrieve news right now (${err.message}). Tap Refresh to try again.`,
+        sentiment: 'Neutral', impact: 'Low', keyPoints: [], articles: []
+      };
+    }
+
+    done++;
+    const pct = Math.round((done / COMPANIES.length) * 100);
+    $('progress-fill').style.width    = pct + '%';
+    $('scan-btn').textContent         = pct + '%';
+
+    updateStats();
+    renderCards();   /* update this company's card in place */
+
+    if (done < COMPANIES.length) await new Promise(r => setTimeout(r, 400));
+  }
+
+  /* Done */
+  scanning = false;
+  $('scan-btn').disabled    = false;
+  $('scan-btn').textContent = 'Refresh';
+  $('progress-wrap').classList.remove('visible');
+
+  const t = new Date().toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' });
+  $('header-sub').textContent = `Updated ${t} · ${COMPANIES.length} stocks`;
+
+  showToast('Scan complete — ' + COMPANIES.length + ' stocks analysed');
+}
+
+/* ── Toast ── */
+function showToast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+initApp();
+</script>
+</body>
+</html>
